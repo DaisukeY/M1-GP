@@ -1,0 +1,1626 @@
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <sstream>
+#include <algorithm>
+#include <ctime>
+#include <map>
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+#include <float.h>
+#include <string.h>
+#include <assert.h>
+#include <ctype.h>
+#include <time.h>
+
+#include "prototype.h"
+
+using namespace std;
+
+// 番兵ノード
+//const Node *FAKE = new Node();
+// エリート個体
+
+// 入力値
+static input in[TEST_POINT];
+
+// ランダム関数
+double seed;
+
+int intrnd ()
+{
+	double const a    = 16807;
+	double const m    = 2147483647;
+    	double temp = (double) (seed * a);
+
+	seed = (int) (temp - m * floor( temp / m ));
+
+	return seed;
+}
+float rand_0to1()
+{
+	return ( (float)(intrnd()) / 2147483647.0 );
+}
+
+float random_number()
+{
+	float r;
+	for (; (r = rand_0to1() ) >= 1.0; ){
+		//cout << "random number >= " << r << endl;
+	}
+	return ( r );
+
+}
+
+
+/*
+float random_number()
+{
+	ifstream ifs("random_number.txt");
+	string buff;
+	double r;
+	if(getline(ifs, buff) and ifs) {
+
+		stringstream ss(buff);
+		ss >> r;
+		cout << r << endl;
+	}
+/*
+	static ifstream ifs;
+	if(!ifs){
+		ifs.open("random_number.txt");
+		if( ifs.fail() ){
+			cout << "Don't Open Random File\n";
+			exit (0);
+		}
+	}
+	double r = 0;
+	string buff;
+	getline(ifs, buff);
+	stringstream ss(buff);
+	ss >> r;
+
+	return r;
+}*/
+
+class Random_number
+{
+private:
+	ifstream ifs;
+	string buff;
+	double r;
+
+	Random_number()
+	{
+		ifs.open("random_number.txt");
+	}
+	Random_number(const Random_number& rhs);
+	Random_number& operator=(const Random_number& rhs);
+
+public:
+	static Random_number* getInstance()
+	{
+		static Random_number r;
+		return &r;
+	}
+
+	double get(){
+		buff.erase();
+		if( getline(ifs, buff) && ifs ){
+			stringstream ss( buff );
+			ss >> r;
+			return r;
+		}
+		else{
+			cout << "random_number file is EOF\n";
+			exit(1);
+		}
+	}
+
+};
+
+Random_number* run = Random_number::getInstance();
+
+// 構文木から配列に変換(後置記法)
+void syntax_array(Node *p, string *str)
+{
+	*str = *str + p->string;
+	if(p->left != NULL){
+		syntax_array(p->left, str);
+	}
+	if(p->right != NULL){
+		syntax_array(p->right, str);
+	}
+}
+
+// 後置記法表示
+void show_tree(Node *p)
+{
+	if(p != NULL){
+		string str;
+		syntax_array(p, &str);
+		cout << str << endl;
+	}
+}
+
+// 構文木情報
+void _tree_info(Node *p)
+{
+	if(p == NULL){
+		return ;
+	}
+
+	printf("0x%-7x\t", p);
+	printf("0x%-7x\t", p->parent);
+	printf("%4d\t", p->no);
+	printf("%4d\t", p->depth);
+	printf("%4s\t", p->string.c_str());
+	printf("0x%-7x\t", p->left);
+	printf("0x%-7x\n", p->right);
+
+	if(p->left != NULL){
+		_tree_info(p->left);
+	}
+	if(p->right != NULL){
+		_tree_info(p->right);
+	}
+}
+
+void tree_info(Node *p)
+{
+	printf("%-8s\t", "adress");
+	printf("%-8s\t", "parent");
+	printf("%4s\t", "No");
+	printf("%4s\t", "depth");
+	printf("%4s\t", "str");
+	printf("%-8s\t", "left");
+	printf("%-8s\n", "right");
+	_tree_info(p);
+}
+
+// ノード情報
+void node_info(Node *p)
+{
+	printf("%-8s\t", "adress");
+	printf("%-8s\t", "parent");
+	printf("%4s\t", "No");
+	printf("%4s\t", "depth");
+	printf("%4s\t", "str");
+	printf("%-8s\t", "left");
+	printf("%-8s\n", "right");
+	printf("0x%-7x\t", p);
+	printf("0x%-7x\t", p->parent);
+	printf("%4d\t", p->no);
+	printf("%4d\t", p->depth);
+	printf("%4s\t", p->string.c_str());
+	printf("0x%-7x\t", p->left);
+	printf("0x%-7x\n", p->right);
+}
+
+// ファイル行数カウント
+int get_line_num(FILE *fp)
+{
+	int line = 0;
+	char buf[1024];
+	while(NULL != fgets(buf, 1024, fp)){
+		line++;
+	}
+	fseek(fp, 0, SEEK_SET);
+	return line;
+}
+
+// 比較関数
+int df_comp(const void* c1, const void* c2)
+{
+	const df_word* a = (const df_word*)c1;
+	const df_word* b = (const df_word*)c2;
+
+	int tmp1 = a->wordid;
+	int tmp2 = b->wordid;
+
+	return tmp1 - tmp2;
+}
+
+int tf_comp(const void* c1, const void* c2)
+{
+	const tf_word* a = (const tf_word*)c1;
+	const tf_word* b = (const tf_word*)c2;
+
+	int tmp1 = a->wordid;
+	int tmp2 = b->wordid;
+
+	return tmp1 - tmp2;
+}
+
+int f_comp( const void *c1, const void *c2 )
+{
+  const best_f* a = (const best_f*)c1;
+  const best_f* b = (const best_f*)c2;
+
+  int tmp1 = a->f;
+  int tmp2 = b->f;
+
+  return tmp1 - tmp2;
+}
+
+//df_info配列ソート
+bool Df_infoWord(const df_word& rLeft, const df_word& rRight)
+{
+	return rLeft.wordid < rRight.wordid;
+}
+
+
+int pair_comp( const void *c1, const void *c2 )
+{
+	Pair test1 = *(Pair *)c1;
+	Pair test2 = *(Pair *)c2;
+
+	int tmp1 = test1.percent;
+	int tmp2 = test2.percent;
+
+	return tmp2 - tmp1;
+}
+
+VS split(string str, string delim)
+{
+  VS items;
+  size_t dlm_idx;
+  if(str.npos == (dlm_idx = str.find_first_of(delim))) {
+    items.push_back(str.substr(0, dlm_idx));
+  }
+  while(str.npos != (dlm_idx = str.find_first_of(delim))) {
+    if(str.npos == str.find_first_not_of(delim)) {
+      break;
+    }
+    items.push_back(str.substr(0, dlm_idx));
+    dlm_idx++;
+    str = str.erase(0, dlm_idx);
+    if(str.npos == str.find_first_of(delim) && "" != str) {
+      items.push_back(str);
+      break;
+    }
+  }
+  return items;
+}
+
+// stringからintへ変換
+int stoi(string s)
+{
+	int i;
+	stringstream ss(s.data());
+	ss >> i;
+	return i;
+}
+
+// stringからdoubleへ変換
+double stod(string s)
+{
+	double d;
+	istringstream iss;
+	iss.str(s);
+	iss >> d;
+	return d;
+}
+
+// 番号の再設定
+long int _tree_number_set(Node *p, long int i)
+{
+	p->no = i++;
+	if(p->left != NULL){
+		i = _tree_number_set(p->left, i);
+	}
+	if(p->right != NULL){
+		i = _tree_number_set(p->right, i);
+	}
+	return i;
+}
+
+void tree_number_set(Node *p)
+{
+	long int i = 0;
+	p->no = i++;
+	if(p->left != NULL){
+		i = _tree_number_set(p->left, i);
+	}
+	if(p->right != NULL){
+		i = _tree_number_set(p->right, i);
+	}
+}
+
+// 木のコピー
+Node *tree_copy(Node *p)
+{
+	if(p == NULL){
+		return NULL;
+	}
+	else{
+		string str;
+		syntax_array(p, &str);
+		str = breadth_first(p);
+		Node *q = build_tree(str);
+		return q;
+	}
+}
+
+// 構文木の消去
+Node *free_tree(Node *p)
+{
+	if(p != NULL){
+		if(p->left != NULL){
+			free_tree(p->left);
+		}
+		if(p->right != NULL){
+			free_tree(p->right);
+		}
+		delete p;
+	}
+	return NULL;
+}
+
+// 構文木の長さの探査
+int tree_length(Node *p)
+{
+	if(p == NULL){
+		return 0;
+	}
+	else{
+		//char *str = new char[LINE_WIDE];
+		//memset(str, 0, sizeof(str));
+		string str;
+		syntax_array(p, &str);
+		//int l = strlen(str);
+		//delete [] str;
+		int l = str.length();
+		return l;
+	}
+}
+
+// 交叉点のポインタの走査
+Node *_key_serch(Node *p, const int x, int *count)
+{
+	Node *q = NULL;
+
+	if(x == *count){
+		return p;
+	}
+
+	*count += 1;
+	if(p->left != NULL){
+		q = _key_serch(p->left, x, count);
+	}
+	if((p->right != NULL) && (q == NULL)){
+		q = _key_serch(p->right, x, count);
+	}
+
+	return q;
+}
+
+Node *key_serch(Node *p, const int x)
+{
+	Node *q = NULL;
+	int count = 1;
+
+	if(x == 0){
+		return p;
+	}
+	else if(x >= tree_length(p)){
+		return NULL;
+	}
+
+	if(p->left != NULL){
+		q = _key_serch(p->left, x, &count);
+	}
+	if((p->right != NULL) && (q == NULL)){
+		q = _key_serch(p->right, x, &count);
+	}
+
+	return q;
+}
+
+//構文木の構造チェック  エラー = 1
+int tree_error_check(Node *p)
+{
+	int flg = 0;
+//	cout << p->string << endl;
+
+	if(p == NULL){
+		return -1;
+	}
+	else if( (p->string == "s") || (p->string == "c") || (p->string == "l") || (p->string == "e") ){
+		if((p->right != NULL) || (p->left == NULL)){
+			return 1;
+		}
+	}
+	else if( (p->string == "+") || (p->string == "*") || (p->string == "-") || (p->string == "/") ){
+		if((p->right == NULL) || (p->left == NULL)){
+			return 1;
+		}
+	}
+
+	if(p->left != NULL){
+		flg = tree_error_check(p->left);
+	}
+	if(p->right != NULL){
+		flg = tree_error_check(p->right);
+	}
+	return flg;
+}
+
+//子ノード同士の交換
+void node_swap1(Node *p1, Node *p2)
+{
+	Node *tmp = NULL;
+	Node *head1 = NULL, *head2 = NULL;
+	int pflg1 = 0, pflg2 = 0;
+
+	//p1の親ノードの左右確認
+	head1 = p1->parent;
+	if(head1->left == p1){
+		pflg1 = 1;
+	}
+	//p2の親ノードの左右確認
+	head2 = p2->parent;
+	if(head2->left == p2){
+		pflg2 = 1;
+	}
+
+	if(pflg1 == 0){
+		tmp = head1->right;
+		if(pflg2 == 0){
+			head1->right = head2->right;
+			head2->right = tmp;
+			head2->right->parent = head2;
+		}
+		else{
+			head1->right = head2->left;
+			head2->left  = tmp;
+			head2->left->parent = head2;
+		}
+		head1->right->parent = head1;
+	}
+	else{
+		tmp = head1->left;
+		if(pflg2 == 0){
+			head1->left = head2->right;
+			head2->right = tmp;
+			head2->right->parent = head2;
+		}
+		else{
+			head1->left = head2->left;
+			head2->left = tmp;
+			head2->left->parent = head2;
+		}
+		head1->left->parent = head1;
+	}
+}
+
+//ルートノードと子ノードの交換
+void node_swap2(Node **p1, Node *p2)
+{
+	Node *tmp, *head = p2->parent;
+	int flg = 0;
+;
+	if(head->left == p2){
+		flg = 1;
+	}
+
+	tmp = *p1;
+	*p1 = p2;
+	if(flg == 0){
+		head->right = tmp;
+		head->right->parent = head;
+	}
+	else{
+		head->left = tmp;
+		head->left->parent = head;
+	}
+}
+
+//ルートノード同士の交換
+void node_swap3(Node **p1, Node **p2)
+{
+	Node *tmp;
+	tmp = *p1;
+	*p1 = *p2;
+	*p2 = tmp;
+}
+
+// 演算子の選択
+int random_function()
+{
+	static const int function[8] = { '+', '-', '*', '/', 's', 'c', 'l', 'e' };
+	//return ( function[(int) (random_number() * N_FUNCTION)] );
+	return ( function[(int) (run->get() * N_FUNCTION)]);
+}
+int random_terminal()
+{
+	//static const int terminal[3] = { 'T', 'D', 'N' };
+	static const int terminal = 'x';
+	return ( terminal );
+	//return ( terminal[(int) (random_number() * N_TERMINAL)] );
+	//return ( terminal[(int) (run->get() * N_TERMINAL)] );
+}
+
+// 木の生成
+long int rnd_tree(string buff, long int size)
+{
+	long int dangling_limbs = 1, i;
+
+	for(i = 0;( (dangling_limbs > 0) && (i < size) );i++){
+		//if(random_number() > (double)(dangling_limbs*dangling_limbs+1)/(double)(size-i)){
+		if(run->get() > (double)(dangling_limbs*dangling_limbs+1)/(double)(size-i)){
+			buff[i] = random_function();
+			if((buff[i] == '+') || (buff[i] == '-') || (buff[i] == '*') || (buff[i] == '/')){
+				dangling_limbs++;
+			}
+		}
+		else{
+			buff[i] = random_terminal();
+			dangling_limbs--;
+		}
+	}
+	buff[i] = '\0';
+
+	if(dangling_limbs != 0){
+		cout << "Error\n\n";
+		exit(1);
+	}
+
+	return i;
+}
+
+// 数値返却
+double mach_string(string str, double x)
+{
+	if(str == "x"){
+		return x;
+	}
+	else{
+		return (double)atof(str.c_str());
+	}
+}
+
+// 木の計算
+double prog_value(Node *p, double x)
+{
+	double l = 0.0, r = 0.0;
+
+	if(p->left != NULL){
+		l = prog_value(p->left, x);
+	}
+	if(p->right != NULL){
+		r = prog_value(p->right, x);
+	}
+	if((p->left == NULL) && (p->right == NULL)){
+		return mach_string(p->string, x);
+	}
+
+	if(p->string == "+"){
+		return (l + r);
+	}
+	else if(p->string == "-"){
+		return (l - r);
+	}
+	else if(p->string == "*"){
+		return (l * r);
+	}
+	else if(p->string == "/"){
+		if(r == 0.0){
+			return 0.0;
+		}
+		else{
+			return (l / r);
+		}
+	}
+	else if(p->string == "s"){
+		return (sin(l));
+	}
+	else if(p->string == "c"){
+		return (cos(l));
+	}
+	else if(p->string == "e"){
+		return (exp(l));
+	}
+	else if(p->string == "l"){
+		if(l == 0){
+			return 0.0;
+		}
+		else{
+			return (log(l));
+		}
+	}
+	else{
+		return -1.0;
+	}
+}
+
+double test_fitness(Node *p, double x)
+{
+	double calc = prog_value(p, x);
+
+	if(__isnan(calc) || __isinf(calc)){
+		return 0.0;
+	}
+	else{
+		return calc;
+	}
+}
+
+// 木の深さ探査
+void _depth_serch(Node *p, int d, int *m)
+{
+	if(p->left != NULL){
+		_depth_serch(p->left, ++d, m);
+	}
+	if(p->right != NULL){
+		_depth_serch(p->right, ++d, m);
+	}
+
+	if((p->left == NULL) && (p->right ==NULL)){
+		if(d > *m){
+			*m = d;
+		}
+	}
+}
+
+int depth_serch(Node *p)
+{
+	int d = 0;
+	int m = 0;
+	_depth_serch(p, d, &m);
+	return m-1;
+}
+
+// 配列から構文木の生成
+int _make_tree(Node **root, Node *parent, string str, size_t num, int depth)
+{
+	Node *p;
+
+	//cout << "num = " << num << "\t" << str[num] << endl;
+	if((p = new Node()) == NULL){
+		cout << "Malloc Error\n";
+		exit(-1);
+	}
+	else if(str.length() <= num){
+		return 0;
+	}
+
+	p->parent = parent;
+	p->no = (int)num;
+	p->depth = depth++;
+	p->string = str[num];
+	p->left = NULL;
+	p->right = NULL;
+
+	if(*root == NULL){
+		*root = p;
+	}
+	else if(parent->left == NULL){
+		parent->left = p;
+	}
+	else if( (parent->string != "s") || (parent->string != "c") || (parent->string != "l") || (parent->string != "e") ){
+		parent->right = p;
+	}
+	//node_info(p);
+
+	switch(str[num]){
+		case 's':
+		case 'c':
+		case 'e':
+		case 'l':
+			//while((str[num] != 'T') && (str[num] != 'D') && (str[num] != 'F')){
+			while( str[num] != 'x' ){
+				parent = p;
+				num++;
+				if((str[num] == '+') || (str[num] == '-') || (str[num] == '*') || (str[num] == '/')){
+					num = _make_tree(root, p, str, num, depth);
+				}
+
+				//cout << "num = " << num << "\t" << str[num] << endl;
+				if((p = new Node()) == NULL){
+					cout << "Malloc Error\n";
+					exit(-1);
+				}
+				else if(str.length() <= num){
+					return 0;
+				}
+				p->parent = parent;
+				p->no = num;
+				p->depth = depth++;
+				p->string = str[num];
+				p->left = NULL;
+				p->right = NULL;
+				if(parent->left == NULL){
+					parent->left = p;
+				}
+				//node_info(p);
+			}
+			break;
+		case '+':
+		case '-':
+		case '*':
+		case '/':
+			num = _make_tree(root, p, str, num+1, depth);
+			if(parent == NULL){
+				num = _make_tree(root, p, str, num+1, depth);
+			}
+			else{
+				num = _make_tree(root, p, str, num+1, depth);
+				if( (p->string == "s") || (p->string == "c") || (p->string == "l") || (p->string == "e") ){
+					parent->right = p;
+				}
+			}
+			break;
+	}
+	return num;
+}
+
+// 構文木の構築
+Node *make_tree(string str)
+{
+	Node *root = NULL;
+
+	//cout << "make_tree\n" << str << endl;
+	if(str.length() > 1){
+		_make_tree(&root, NULL, str, 0, 0);
+	}
+	else{
+		Node *p;
+		if( (p = new Node()) == NULL ){
+			cout << "Malloc Error\n";
+			exit(-1);
+		}
+		p->parent = NULL;
+		p->no = 0;
+		p->depth = 0;
+		p->string = str[0];
+		p->left = NULL;
+		p->right = NULL;
+		root = p;
+	}
+
+	return root;
+}
+
+Node* _build_tree(Node *parent, string str, int num, int d)
+{
+	if(str[num] == '0'){
+		return NULL;
+	}
+	else if( num >= sum_node(DEPTH) ){
+		return NULL;
+	}
+
+	Node *p = new Node();
+	assert(p);
+
+	p->parent = parent;
+	p->string = str[num];
+	p->no	  = num;
+	p->depth  = d;
+	p->left   = NULL;
+	p->right  = NULL;
+
+	int l = num * 2 + 1;
+	int r = l + 1;
+
+	p->left  = _build_tree(p, str, l, ++d);
+	p->right = _build_tree(p, str, r, ++d);
+
+	return p;
+}
+
+Node *build_tree(string str)
+{
+	Node *root = NULL;
+
+	if(str.length() > 1){
+		root = _build_tree(NULL, str, 0, 0);
+	}
+	else{
+		root = new Node();
+		assert(root);
+
+		root->parent = NULL;
+		root->no	  = 0;
+		root->depth  = 0;
+		root->string = str[0];
+		root->left   = NULL;
+		root->right  = NULL;
+	}
+
+	return root;
+}
+
+// 構文木をランダムに生成
+int _make_tree(Node **root, Node *parent, int num, int d)
+{
+	string buff;
+	//if( random_number() > (d / DEPTH) ){
+	if( run->get() > (d / DEPTH) ){
+		buff += random_function();
+	}
+	else{
+		buff += random_terminal();
+	}
+	//cout << buff << endl;
+
+	Node *p;
+	if( (p = new Node()) == NULL){
+		cout << "Malloc Error\n";
+	}
+
+	p->parent = parent;
+	p->no	   = num;
+	p->depth  = d++;
+	p->string = buff;
+	p->left   = NULL;
+	p->right  = NULL;
+
+	if(*root == NULL){
+		*root = p;
+	}
+	else if(parent->left == NULL){
+		parent->left = p;
+	}
+	else if( (parent->string != "s") || (parent->string != "c") || (parent->string != "l") || (parent->string != "e") ){
+		parent->right = p;
+	}
+	//node_info(p);
+
+	if( (buff == "s") || (buff == "c") || (buff == "e") || (buff == "l") ){
+		//while( (buff != "T") && (buff != "D") ){
+		while( buff != "x" ){
+			parent = p;
+			num++;
+			buff.erase();
+
+			//if( random_number() > (d / DEPTH) ){
+			if( run->get() > (d / DEPTH) ){
+				buff += random_function();
+			}
+			else{
+				buff += random_terminal();
+			}
+			if( (buff == "+") || (buff == "-") || (buff == "*") || (buff == "/") ){
+				num = _make_tree(root, p, num, d);
+			}
+
+			if((p = new Node()) == NULL){
+				cout << "Malloc Error\n";
+				exit(-1);
+			}
+			p->parent = parent;
+			p->no = num;
+			p->depth = d++;
+			p->string = buff;
+			p->left = NULL;
+			p->right = NULL;
+			if(parent->left == NULL){
+				parent->left = p;
+			}
+			//node_info(p);
+		}
+	}
+	else if( (buff == "+") || (buff == "-") || (buff == "*") || (buff == "/") ){
+		num = _make_tree(root, p, num+1, d);
+		if(parent == NULL){
+			num = _make_tree(root, p, num+1, d);
+		}
+		else{
+			num = _make_tree(root, p, num+1, d);
+			if( (p->string == "s") || (p->string == "c") || (p->string == "l") || (p->string == "e") ){
+				parent->right = p;
+			}
+		}
+	}
+
+	return 0;
+}
+
+
+Node *make_tree()
+{
+	Node *root = NULL;
+	_make_tree(&root, NULL, 0, 0);
+	//cout << endl;
+	//tree_info(root);
+	return root;
+}
+
+Node* _build_tree(Node **root, Node *parent, int num, int d)
+{
+	string buff;
+	if( run->get() > (d / DEPTH) ){
+		buff += random_function();
+	}
+	else{
+		buff += random_terminal();
+	}
+
+	Node *p = new Node();
+	assert(p);
+
+	p->parent = parent;
+	p->left   = NULL;
+	p->right  = NULL;
+	p->string = buff;
+	p->depth  = d;
+	p->no     = num;
+
+	if(*root == NULL){
+		*root = p;
+	}
+
+	if(p->string == "x"){
+		return p;
+	}
+
+	p->left = _build_tree(root, p, num*2+1, ++d);
+	if( (p->string != "s") && (p->string != "c") && (p->string != "l") && (p->string != "e") ){
+		p->right = _build_tree(root, p, num*2+2, d);
+	}
+	return p;
+}
+
+Node *build_tree()
+{
+	Node *root = NULL;
+	_build_tree(&root, NULL, 0, 0);
+	return root;
+}
+
+// 完全２分木の作成
+void grow(Node *p)
+{
+	if(p->depth == DEPTH){
+			return ;
+		}
+
+		Node *q;
+		if( (q = new Node()) == NULL ){
+			cout << "Malloc Error\n";
+			exit(-1);
+		}
+		q->parent = p;
+		q->depth  = p->depth + 1;
+		q->no	   = -1;
+		q->string = "F";
+
+		if( (p->string == "s") || (p->string == "c") || (p->string == "l") || (p->string == "e") ){
+			if(p->right == NULL){
+				q->left   = NULL;
+				q->right  = NULL;
+				p->right = q;
+				grow(q);
+			}
+		}
+		else if( (p->string == "F") || (p->string == "L")  ){
+			grow(q);
+			if(p->left == NULL){
+				p->left = q;
+				grow(p);
+			}
+			else if(p->right == NULL){
+				p->right = q;
+			}
+		}
+		else if( (p->left == NULL) && (p->right == NULL) ){
+			q->parent = p->parent;
+			q->depth  = p->depth;
+			q->string = "F";
+			q->left   = p;
+			q->right  = NULL;
+			if( p->parent->left == p){
+				p->parent->left = q;
+			}
+			else{
+				p->parent->right = q;
+			}
+
+			p->parent = q;
+			p->depth++;
+			grow(p);
+			if( q->right == NULL){
+				grow(q);
+			}
+		}
+}
+
+void grow_tree(Node *p)
+{
+	vector<Node *>q;
+	terminal_depth(p, q);
+	vector<Node *>::iterator it;
+	for(it = q.begin();it != q.end();it++){
+		grow(*it);
+	}
+}
+
+// 最大深度未満のターミナルの探査
+void terminal_depth(Node *p, vector<Node *>&q)
+{
+	if((p->left == NULL) && (p->right == NULL)){
+		if(p->depth < DEPTH){
+			q.push_back(p);
+		}
+	}
+	else if( ((p->left != NULL) && (p->right == NULL)) && (p->depth < DEPTH) ){
+		q.push_back(p);
+	}
+	if(p->left != NULL){
+		terminal_depth(p->left, q);
+	}
+	if(p->right != NULL){
+		terminal_depth(p->right, q);
+	}
+}
+
+// 総ノード数
+int sum_node(int d)
+{
+	int x = 0;
+	for(int i = 0;i <= d;i++){
+		x += pow(2, i);
+	}
+	return x;
+}
+
+// 幅優先での配列への変換
+void _breadth_first(Node *p, vector< pair<string, int> >& df)
+{
+	df.push_back( make_pair(p->string, p->no));
+	if(p->left != NULL){
+		_breadth_first(p->left, df);
+	}
+	if(p->right != NULL){
+		_breadth_first(p->right, df);
+	}
+}
+
+string breadth_first(Node *p)
+{
+	vector< pair<string, int> > df;
+	df.push_back( make_pair(p->string, p->no));
+
+	if(p->left != NULL){
+		_breadth_first(p->left, df);
+	}
+	if(p->right != NULL){
+		_breadth_first(p->right, df);
+	}
+
+	vector<string> str(sum_node(DEPTH), "0");
+	vector< pair<string, int> >::iterator it = df.begin();
+	while( it != df.end() ){
+		vector<string>::iterator vci = str.begin();
+		for(int i = 0;i < (*it).second;i++){
+			vci++;
+		}
+		str.erase(vci);
+		str.insert(vci, 1, (*it).first);
+		it++;
+		vci = str.begin();
+	}
+
+	vector<string>::iterator q = str.begin();
+	string st;
+	while(q != str.end()){
+		st += *q;
+		q++;
+	}
+	return st;
+}
+
+// 生成された木の整合性をとる
+string build_check(string str)
+{
+	for(int i = 0;i < sum_node(DEPTH-1);i++){
+		int l = i * 2 + 1;
+		int r = l + 1;
+		if( (str[i] == '+') || (str[i] == '-') || (str[i] == '*') || (str[i] == '/') ){
+			if( str[l] == '0' ){
+				str[l] = 'x';
+			}
+			if( str[r] == '0' ){
+				str[r] = 'x';
+			}
+		}
+		else if( (str[i] == 's') || (str[i] == 'c') || (str[i] == 'e') || (str[i] == 'l') ){
+			if( str[l] == '0' ){
+				str[l] = 'x';
+			}
+			if( str[r] != '0' ){
+				str[r] = '0';
+			}
+		}
+		else{
+
+			if( str[l] != '0' ){
+				str[l] = '0';
+			}
+			if( str[r] != '0' ){
+				str[r] = '0';
+			}
+		}
+	}
+
+	return str;
+}
+
+// 確率分布から次世代木の生成
+void distribution_newtrees(Node *new_pop[], Node *pop[], double fitness[])
+{
+	int length = sum_node(DEPTH);
+	Pair str_fit[POP_SIZE];
+
+	// Probaの確保
+	Proba *p = new Proba[length+1];
+	for(int i = 0;i <= length;i++){
+		p[i].pair = NULL;
+		p[i].length = -1;
+	}
+
+	for(int i = 0;i < POP_SIZE;i++){
+		str_fit[i].string = breadth_first(pop[i]);
+		str_fit[i].percent = fitness[i];
+		//cout << str_fit[i].string << " : " << str_fit[i].percent << endl;
+	}
+	qsort( str_fit, POP_SIZE, sizeof(Pair), pair_comp );		//str_fitをfitnessで降順にソート
+
+	for(int len = 0;len < length;len++){
+		vector<string> vstr(POP_SIZE, "0");
+
+		for(int i = 0;i < POP_SIZE;i++){
+			vstr[i] = str_fit[i].string[len];
+		}
+
+		// 各演算子のカウント
+		map<string, int> date;
+		date.clear();
+		vector<string>::iterator vsi = vstr.begin();
+		while( vsi != vstr.end() ){
+			if( date.find(*vsi) == date.end() ){
+				date[(*vsi)] = 0;
+			}
+			date[(*vsi)]++;
+			vsi++;
+		}
+
+		// 優良個体への選択確率の補正
+		vector<string> strstr;
+		for(int i = 0;i < POP_SIZE;i++){
+			//cout << "str_fit : " << str_fit[i].string[len] << endl;
+			string find_str(str_fit[i].string, len, 1);
+
+			for(size_t j = 0;j < date.size();j++){
+				if( (find(strstr.begin(), strstr.end(), find_str)) != strstr.end() ){
+					break;
+				}
+				else if( (date.find( find_str ) != date.end()) ){
+					date[find_str] += POP_SIZE - i;
+					strstr.push_back(find_str);
+					//cout << find_str << " : " << date[find_str] << endl;
+				}
+			}
+		}
+
+		// 各演算子の確率計算
+		int sum = 0.0;
+		Pair *pa = new Pair[date.size()];
+		assert(pa);
+		map<string, int>::iterator it = date.begin();
+
+		while( it != date.end() ){
+			sum += (*it).second;
+			++it;
+		}
+		it = date.begin();
+
+		int k = 0;
+		pa[k].string  = (*it).first;
+		pa[k].percent = (double)(*it).second / sum;
+		//cout << "percent" << endl << pa[k].string << " : " << pa[k].percent << endl;
+		++it;
+		++k;
+
+		while( it != date.end() ){
+			pa[k].string  = (*it).first;
+			pa[k].percent = pa[k-1].percent + (double)(*it).second / sum;
+			//cout << pa[k].string << " : " << pa[k].percent << endl;
+			++it;
+			++k;
+		}
+
+		// Pairの代入
+		p[len].pair = pa;
+		p[len].length = (int)date.size();
+		//cout << endl;
+	}
+
+	// 次世代の作成
+	int a = 0, sum_n = sum_node(DEPTH);
+	while(a < POP_SIZE){
+		string str;
+		for(int i = 0;i < sum_n;i++){
+			//double r = random_number();
+			int j;
+			double r = run->get();
+			for(j = 0;j < p[i].length;j++){
+				if(r < p[i].pair[j].percent){
+					break;
+				}
+			}
+			str += p[i].pair[j].string;
+		}
+
+		str = build_check(str);
+
+		new_pop[a] = build_tree(str);
+		//tree_info(new_pop[a]);
+		//cout << endl;
+		a++;
+	}
+}
+
+// 最小の数を探す
+int min(int a, int b, int c)
+{
+	return a > b ? (b > c ? c : b) : (a > c ? c : a);
+}
+
+// レーベンシュタイン距離を求める
+int levenshtein_distance(string str1, string str2)
+{
+	int lenstr1 = str1.size() + 1;
+	int lenstr2 = str2.size() + 1;
+	int d[lenstr1][lenstr2];
+	int i1 = 0, i2 = 0, cost = 0;
+
+	for (;i1 < lenstr1; i1++) d[i1][0] = i1;
+	for (;i2 < lenstr2; i2++) d[0][i2] = i2;
+
+	for (i1 = 1; i1 < lenstr1; i1++) {
+		for (i2 = 1; i2 < lenstr2; i2++) {
+			cost = str1[i1 - 1] == str2[i2 - 1] ? 0 : 1;
+			d[i1][i2] = min(d[i1 - 1][i2] + 1, d[i1][i2 - 1] + 1, d[i1 - 1][i2 - 1] + cost);
+		}
+	}
+
+	return d[lenstr1 - 1][lenstr2 - 1];
+}
+
+// 標準偏差
+double standard_deviation(const int dis[])
+{
+	int x = 0;
+	double ave = 0;
+
+	for(int i = 0;i < POP_SIZE;i++){
+		ave += dis[i];
+	}
+	ave /= POP_SIZE;
+
+	for(int i = 0;i < POP_SIZE;i++){
+		x += pow( (dis[i] - ave), 2.0 );
+	}
+	x /= POP_SIZE;
+
+	return ( sqrt(x) );
+}
+
+// 分散半径
+int deviation_radius(const int dis[])
+{
+	int min = EDIT_DISTANCE, max = 0;
+	for(int i = 0;i < POP_SIZE;i++){
+		if(min > dis[i]){
+			min = dis[i];
+		}
+		if(max < dis[i]){
+			max = dis[i];
+		}
+	}
+	return (max - min);
+}
+
+// 関数同定評価
+void function_identification(double fitness[], Node **pop)
+{
+	for(int i = 0;i < POP_SIZE;i++){
+		double total_error = 0.0;
+		for(int j = 0;j < TEST_POINT;j++){
+			total_error += fabs( in[j].y - test_fitness(pop[i], in[j].x) );
+		}
+		fitness[i] = TEST_POINT / (total_error + TEST_POINT);
+	}
+}
+
+// 一様交叉
+void cross_over(Node *p1, Node *p2, Node **c1, Node **c2, long int size)
+{
+	int cp1, cp2;
+	Node *q1, *q2;
+
+	do{
+		*c1 = free_tree(*c1);
+		*c2 = free_tree(*c2);
+
+		*c1 = tree_copy(p1);
+		*c2 = tree_copy(p2);
+
+		//cp1 = random_number() * tree_length(*c1);
+		//cp2 = random_number() * tree_length(*c2);
+		cp1 = run->get() * tree_length(*c1);
+		cp2 = run->get() * tree_length(*c2);
+
+		if((cp1 != 0) && (cp2 != 0)){			//子同士の交換
+			q1 = key_serch(*c1, cp1);
+			q2 = key_serch(*c2, cp2);
+			node_swap1(q1, q2);
+		}
+		else if((cp1 == 0) && (cp2 != 0)){		//rootと子の交換
+			q2 = key_serch(*c2, cp2);
+			node_swap2(c1, q2);
+		}
+		else if((cp1 != 0) && (cp2 == 0)){
+			q1 = key_serch(*c1, cp1);
+			node_swap2(c2, q1);
+		}
+		else{									//root同士の交換
+			node_swap3(c1, c2);
+		}
+	}while((tree_length(*c1) > size) || (tree_length(*c2) > size));
+
+	tree_number_set(*c1);
+	tree_number_set(*c2);
+}
+
+//突然変異
+void mutate(Node *p, Node **c, unsigned int size){
+	int cp;
+	char *buf = new char[LINE_WIDE];
+	Node *q, *mt = 0;
+
+	do{
+		//突然変異点の決定
+		*c = free_tree(*c);
+		*c = tree_copy(p);
+		cp = random_number() * tree_length(*c);
+		q = key_serch(*c, cp);
+
+		//突然変異木の作成
+		do{
+			memset(buf, 0, LINE_WIDE);
+			mt = free_tree(mt);
+			rnd_tree(buf, size);
+			mt = make_tree(buf);
+		}while(tree_error_check(mt));
+
+		if(cp == 0){
+			node_swap3(c, &mt);
+		}
+		else{
+			node_swap2(&mt, q);
+		}
+	}while(tree_length(*c) > size);		//size以下に調整
+
+	tree_number_set(*c);
+	delete [] buf;
+}
+
+//ランダム選択
+void myselect(int *mum, int *dad)
+{
+	*mum = POP_SIZE * random_number();
+	do{
+		*dad = POP_SIZE * random_number();
+	}while(*mum == *dad);
+}
+
+//ルーレット選択
+void roulette(int *mum, int *dad, double *rou){
+	int i;
+	double r;
+	double f_val[POP_SIZE];
+	double rulette[POP_SIZE];
+	double sum_f_val = 0.0;
+
+	//f値の合計を計算
+	for(i = 0;i < POP_SIZE;i++){
+		if(rou[i] > 0.0){
+			f_val[i] = rou[i];
+		}
+		else{
+			f_val[i] = 0.0;
+		}
+		sum_f_val += f_val[i];
+	}
+
+	//sum_f_valが0の場合ランダム選択
+	if(sum_f_val == 0){
+		myselect(mum, dad);
+		return ;
+	}
+
+	//mum選択
+	rulette[0] = f_val[0] / sum_f_val;				//各個体が選択される確率の設定
+	for(i = 1;i < POP_SIZE;i++){
+		rulette[i] = rulette[i-1] + (f_val[i] / sum_f_val);
+	}
+	r = random_number();						//0.0〜1.0の乱数発生
+	for(i = 0;i < POP_SIZE;i++){
+		if(r <= rulette[i]){
+			*mum = i;
+			break;
+		}
+	}
+
+	//dad選択
+	f_val[*mum] = 0.0;
+	sum_f_val = 0.0;
+	for(i = 0;i < POP_SIZE;i++){
+		sum_f_val += f_val[i];
+	}
+	rulette[0] = f_val[0] / sum_f_val;				//各個体が選択される確率の設定
+	for(i = 1;i < POP_SIZE;i++){
+		rulette[i] = rulette[i-1] + (f_val[i] / sum_f_val);
+	}
+	r = random_number();						//0.0〜1.0の乱数発生
+	for(i = 0;i < POP_SIZE;i++){
+		if(r <= rulette[i]){
+			*dad = i;
+			break;
+		}
+	}
+}
+
+// 初期設定
+void init()
+{
+	// 乱数設定
+	time_t now;
+	seed = time(&now);
+	srand(seed);
+
+	// 入力読み込み
+	FILE *fp = fopen("input_x_y.txt", "r");
+	assert(fp);
+	int a;
+	fscanf(fp, "%d", &a);
+
+	int x = ( rand() / (double)RAND_MAX) * (a - TEST_POINT);
+	char *s = new char[256];
+	for(int i = 0;i < x;i++){
+		memset(s, 0, sizeof(s));
+		fgets(s, 256, fp);
+	}
+
+	for(int i = 0;i < TEST_POINT;i++){
+		fscanf(fp, "%d%lf", &in[i].x, &in[i].y);
+		//cout << in[i].x << " " << in[i].y << endl;
+	}
+	//cout << endl;
+
+	delete [] s;
+	fclose(fp);
+}
+
+int main()
+{
+	Node *pop[POP_SIZE];
+	Node *new_pop[POP_SIZE];
+
+	int dis[POP_SIZE], dr = 0;
+	double sd = 0;
+
+	// 初期設定
+	init();
+
+	// 初期個体生成
+	string center_point_str;
+	pop[0] = build_tree();
+	syntax_array(pop[0], &center_point_str);
+	pop[0] = free_tree(pop[0]);
+
+	//cout << "初期個体" << endl;
+	for(int i = 0;i < POP_SIZE;i++){
+		string st;
+		Node *f = NULL;
+		do{
+			f = free_tree(f);
+			st.erase();
+
+			f = build_tree();
+			syntax_array(f, &st);
+			dis[i] = levenshtein_distance(center_point_str, st);
+		}while( dis[i] > EDIT_DISTANCE );
+
+		pop[i] = f;
+		new_pop[i] = NULL;
+		//show_tree(pop[i]);
+	}
+	//cout << endl;
+
+	double best_fitness = -1.0, gsd = 0.0, gdr = 0.0;
+	int g;
+	string gstr;
+	for(g = 1;(best_fitness < 0.9) && (g <= MAX_GEN);g++){
+	//for(int g = 1;g <= MAX_GEN;g++){
+		//cout << "世代数 : " << g << endl;
+		// 標準偏差 分散半径
+		sd = standard_deviation(dis);
+		dr = deviation_radius(dis);
+		//cout << "標準偏差 : " << sd << "\t分散半径 : " << dr << endl;
+
+
+		// fitness計算
+		double fitness[POP_SIZE];
+		function_identification(fitness, pop);
+
+		// 出力
+		/*for( int i = 0;i < POP_SIZE;i++){
+			cout << fitness[i] << " : ";
+			show_tree(pop[i]);
+		}*/
+
+		double best = -100;
+		int    best_no;
+		for(int i = 0;i < POP_SIZE;i++){
+			if(best < fitness[i]){
+				best_no = i;
+				best = fitness[i];
+			}
+		}
+
+		best_fitness = best;
+		/*cout << "best pop : ";
+		show_tree(pop[best_no]);
+		cout << "best fitness : " << best << endl;*/
+
+		/**/
+		cout << g << ":" << sd << ":" << dr << ":" << best << ":";
+		show_tree(pop[best_no]);
+		/**/
+
+		// 確率分布から次世代個体の生成
+		distribution_newtrees(new_pop, pop, fitness);
+
+		// 分散半径中心
+		center_point_str.erase();
+		center_point_str = breadth_first(pop[best_no]);
+
+		// 世代交代
+		for(int i = 0;i < POP_SIZE;i++){
+			pop[i] = free_tree(pop[i]);
+			pop[i] = tree_copy(new_pop[i]);
+			new_pop[i] = free_tree(new_pop[i]);
+		}
+
+		// 最小分散半径
+		for(int i = 0;i < POP_SIZE;i++){
+			string st;
+			st = breadth_first(pop[i]);
+			dis[i] = levenshtein_distance(center_point_str, st);
+		}
+
+		//cout << endl;
+	}
+
+	// メモリの解放
+	for(int i = 0;i < POP_SIZE;i++){
+		pop[i] = free_tree(pop[i]);
+		new_pop[i] = free_tree(new_pop[i]);
+	}
+
+	if(g <= MAX_GEN){
+		for(int i = g;i < MAX_GEN;i++){
+			cout << i << ":" << gsd << ":" << gdr << ":" << best_fitness << ":" << gstr << endl;
+		}
+	}
+
+	return 0;
+}
